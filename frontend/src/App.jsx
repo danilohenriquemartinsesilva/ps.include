@@ -1,27 +1,76 @@
-// tive que pegar o codigo htlm e tranformar pra jsx, pois não estava conseguindo integrar
+import { useCallback, useEffect, useState } from 'react'
 import logoHeader from './assets/logoHeader.svg'
-import logoNewPost from './assets/logoNewPost.svg'
-import image from './assets/image.svg'
-import imagenone from './assets/imagenone.png'
 import mail from './assets/mail.svg'
 import linkedin from './assets/linkedin.svg'
 import instagram from './assets/instagram.svg'
-import log_out from './assets/log_out.svg'
 
-import React, { useEffect } from 'react'
-import './App.css'
-import axios from 'axios'
-
-const api = axios.create({
-  baseURL: 'http://localhost:3000'
-})
+import NewPostForm from './components/NewPostForm.jsx'
+import PostCard from './components/PostCard.jsx'
+import RecentPosts from './components/RecentPosts.jsx'
+import { listarPosts, criarPost, atualizarPost, apagarPost, mensagemDeErro } from './services/api.js'
 
 function App() {
-// não consegui testar as requisições pq eu perdi meu banco de dados no backend(tentando alterar algumas coisas)
-// mas acho que "só" faltava isso, colocar as rotas para funcionar
-  api.get('/blog').then((response) => {
-    console.log(response)
-  })
+  const [posts, setPosts] = useState([])
+  const [carregando, setCarregando] = useState(true)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [postEmEdicao, setPostEmEdicao] = useState(null)
+
+  const carregarPosts = useCallback(async () => {
+    setCarregando(true)
+    setErro('')
+    try {
+      setPosts(await listarPosts())
+    } catch (e) {
+      setErro(mensagemDeErro(e))
+    } finally {
+      setCarregando(false)
+    }
+  }, [])
+
+  // busca os posts uma vez, quando a página abre
+  useEffect(() => {
+    carregarPosts()
+  }, [carregarPosts])
+
+  // devolve true se salvou (o formulário usa isso para se limpar)
+  const salvarPost = async (dados) => {
+    setEnviando(true)
+    setErro('')
+    try {
+      if (postEmEdicao) {
+        const atualizado = await atualizarPost(postEmEdicao.id, dados)
+        setPosts(posts.map((p) => (p.id === atualizado.id ? atualizado : p)))
+        setPostEmEdicao(null)
+      } else {
+        const novo = await criarPost(dados)
+        setPosts([novo, ...posts])
+      }
+      return true
+    } catch (e) {
+      setErro(mensagemDeErro(e))
+      return false
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const iniciarEdicao = (post) => {
+    setPostEmEdicao(post)
+    document.getElementById('formulario')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const apagar = async (post) => {
+    if (!window.confirm(`Excluir a publicação "${post.titulo}"?`)) return
+    setErro('')
+    try {
+      await apagarPost(post.id)
+      setPosts(posts.filter((p) => p.id !== post.id))
+      if (postEmEdicao?.id === post.id) setPostEmEdicao(null)
+    } catch (e) {
+      setErro(mensagemDeErro(e))
+    }
+  }
 
   return (
     <div className="body">
@@ -31,52 +80,35 @@ function App() {
 
       <section className="feed">
         <div className="main">
-          <div className="newPost">
-            <img src={logoNewPost} alt="Ícone de novo post" />
-            <form action="" method="post" className="formNewPost">
-              <div className="texts">
-                <textarea className="title" placeholder="Escreva seu tema..."></textarea>
-                <textarea className="publication" placeholder="Escreva sua publicação..."></textarea>
-              </div>
+          <NewPostForm
+            postEmEdicao={postEmEdicao}
+            onSalvar={salvarPost}
+            onCancelar={() => setPostEmEdicao(null)}
+            enviando={enviando}
+          />
 
-              <div className="buttons">
-                <button className="button1">Adicionar imagem <img src={image} alt="Ícone de imagem" /></button>
-                <button className="button2">Publicar <img src={log_out} alt="Ícone de publicar" /></button>
-              </div>
-            </form>
-          </div>
+          {erro && (
+            <div className="alert" role="alert">
+              {erro}
+              <button type="button" className="alertRetry" onClick={carregarPosts}>
+                Tentar de novo
+              </button>
+            </div>
+          )}
 
-          <div className="post">
-            <div className="user">
-              <img src={logoNewPost} className="logoPost" alt="Logo do post" />
-              <div className="username">
-                <h1 className="namePost">Include Jr</h1>
-                <span className="descriptionName">Dev. web | soluções inovadoras</span>
-              </div>
-            </div>
-            <div className="descriptionPost">
-              <h1 className="titlePost">Tema Lorem Ipsum</h1>
-              <p className="contentPost">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus gravida sodales consequat. Curabitur condimentum congue felis eget congue. Fusce sed magna nec sem luctus dictum id at nibh.
-              </p>
-              <img className="postImage" src={imagenone} alt="Imagem do post" />
-              <div className="buttons">
-                <button className="button1">Adicionar imagem <img src={image} alt="Ícone de imagem" /></button>
-                <button className="button2">Publicar <img src={log_out} alt="Ícone de publicar" /></button>
-              </div>
-            </div>
-          </div>
+          {carregando && <p className="statusMessage">Carregando publicações...</p>}
+
+          {!carregando && !erro && posts.length === 0 && (
+            <p className="statusMessage">Nenhuma publicação ainda. Escreva a primeira!</p>
+          )}
+
+          {posts.map((post) => (
+            <PostCard key={post.id} post={post} onEditar={iniciarEdicao} onApagar={apagar} />
+          ))}
         </div>
 
         <div className="recent">
-          <div className="recents">
-            <h1 className="titlesection">Ultimas publicações</h1>
-            <div className="postsrecents">
-              <h2 className="article">TEMA LOREM IPSUM..</h2>
-              <h2 className="article">TEMA LOREM IPSUM..</h2>
-              <h2 className="article">TEMA LOREM IPSUM..</h2>
-            </div>
-          </div>
+          <RecentPosts posts={posts} />
           <h1 className="copyright">Direitos reservados à empresa Include Jr.</h1>
         </div>
       </section>
