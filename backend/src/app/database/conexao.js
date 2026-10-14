@@ -1,30 +1,34 @@
-import mysql from 'mysql'
+import 'dotenv/config'
+import mysql from 'mysql2'
 
-const conexao = mysql.createConnection({
-    host: 'localhost',
-    port: '3000',
-    user: 'root',
-    password: 'root',
-    database: 'bdcopa'
+// Pool de conexões: reaproveita conexões e se recupera se o MySQL cair.
+const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT) || 3306, // porta do MySQL (a do servidor Node é outra!)
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'blog_include',
+    waitForConnections: true,
+    connectionLimit: 10
 })
 
-conexao.connect()
-
 /**
- * Executa um código sql com ou sem valores
- * @param {string} sql instrução sql a ser executada
- * @param {string=id | [selecao, id]} valores a serem passados para o sql
- * @param {string} mensagemReject mensagem a ser exibida
- * @returns objeto da Promisse
+ * Executa um comando SQL com ou sem valores.
+ * @param {string} sql instrução SQL a ser executada
+ * @param {any} valores valores para os "?" do SQL (opcional)
+ * @param {string} mensagemReject mensagem de erro amigável
+ * @returns {Promise<any>} linhas (SELECT) ou resultado (INSERT/UPDATE/DELETE)
  */
-export const consulta = (sql, valores='', mensagemReject) => {
+export const consulta = (sql, valores = [], mensagemReject = 'Erro no banco de dados') => {
     return new Promise((resolve, reject) => {
-        conexao.query(sql, valores, (erro, resultado) => {
-            if(erro) return reject(mensagemReject)
-            const row = JSON.parse(JSON.stringify(resultado))
-            return resolve(row)
+        pool.query(sql, valores, (erro, resultado) => {
+            if (erro) {
+                console.error(`[DB] ${mensagemReject}:`, erro.message)
+                return reject(new Error(mensagemReject))
+            }
+            return resolve(resultado)
         })
     })
 }
 
-export default conexao
+export default pool
